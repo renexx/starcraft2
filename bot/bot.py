@@ -46,7 +46,7 @@ class CompetitiveBot(BotAI):
         await self.distribute_workers()
         await self.build_workers()
         await self.build_pylons()
-        await self.build_gateway()
+        # await self.build_gateway()
         await self.build_assimilator()
         await self.build_cyber_core()
         await self.build_other_gateways()
@@ -56,6 +56,7 @@ class CompetitiveBot(BotAI):
         await self.attack_procedure()
         await self.warp_stalkers()
         await self.micro()
+        await self.expansion()
 
         # print(f"{iteration}, n_workers: {self.workers.amount}, n_idle_workers: {self.workers.idle.amount},", \
         #       f"minerals: {self.minerals}, gas: {self.vespene}, cannons: {self.structures(UnitTypeId.PHOTONCANNON).amount},", \
@@ -92,13 +93,14 @@ class CompetitiveBot(BotAI):
 
     # Building the first gateway
     async def build_gateway(self):
-        if (
-                self.structures(UnitTypeId.PYLON).ready
-                and self.can_afford(UnitTypeId.GATEWAY)
-                and not self.structures(UnitTypeId.GATEWAY)
-        ):
-            pylon = self.structures(UnitTypeId.PYLON).ready.random
-            await self.build(UnitTypeId.GATEWAY, near=pylon)
+        if (4 * self.structures(UnitTypeId.NEXUS).amount > self.structures(UnitTypeId.GATEWAY).amount):
+            if (
+                    self.structures(UnitTypeId.PYLON).ready
+                    and self.can_afford(UnitTypeId.GATEWAY)
+                    and not self.structures(UnitTypeId.GATEWAY)
+            ):
+                pylon = self.structures(UnitTypeId.PYLON).ready.random
+                await self.build(UnitTypeId.GATEWAY, near=pylon)
 
     # Gas harvesting
     async def build_assimilator(self):
@@ -148,9 +150,10 @@ class CompetitiveBot(BotAI):
         if (
                 self.structures(UnitTypeId.PYLON).ready
                 and self.can_afford(UnitTypeId.GATEWAY)
-                and self.structures(UnitTypeId.GATEWAY).amount < 4
+                and self.structures(UnitTypeId.GATEWAY).amount
+                + self.structures(UnitTypeId.WARPGATE).amount < 4
         ):
-            pylon = self.structures(UnitTypeId.PYLON).ready.random
+            pylon = self.structures(UnitTypeId.PYLON).ready.first
             await self.build(UnitTypeId.GATEWAY, near=pylon)
 
     async def chrono_boost(self):
@@ -204,6 +207,10 @@ class CompetitiveBot(BotAI):
                     stalker.move(self.proxy_poss)
                 else:
                     stalker.move(self.proxy_poss)
+
+    async def expansion(self):
+        if self.can_afford(UnitTypeId.NEXUS):
+            await self.expand_now()
 
     async def on_end(self, result: Result):
         """
