@@ -9,6 +9,34 @@ from sc2.player import Bot, Computer
 from sc2.data import Result, Difficulty
 import random
 
+"""
+#TODO
+
+Jirka:
+Reformat kodu - rozclenit na soubory
+Zniceni proxy pylon? Nepostavi se dalsi
+Rozsireni nexusu
+Neni zadna obrana - jednotky se nevraci
+Problem, pokud se rozsiri nekam uplne jinam! Najit a znicit base
+Problem, pokud na pozici nenajde zadneho enemy! - Optimalizace utoku
+Vytvorit pruzkum mapy nejakou jednotkou - pruzkum od urcite doby
+Ma vytvorene obranne budovy? Utocit nejdriv na obranne budovy
+Obrana v pripade utoku - jednotky se stahnou - v pozdejsi fazi hry nutne
+Mikro strategie - focus jednoho enemy
+Prizpusobit strategii na counter nasi extremne agresivni strategie
+
+
+Rene:
+1000 iteraci = 6 minuta
+Postavit Stargate!!! - utok voidray
+Stavet Void Ray
+Aktivovat Void ray abilitku, pokud je v utoku (Prismatic Alignment)
+Hlidat si mineraly u nexusu - Dochazeji
+Mala mapa - nesedi souradnice proxy (+zbytecny)
+Prizpusobit souradnice proxy pylonu podle velikosti mapy
+Prizpusobit souradnice staveni budov podle velikosti mapy
+"""
+
 
 class CompetitiveBot(BotAI):
     NAME: str = "CompetitiveBot"
@@ -35,6 +63,7 @@ class CompetitiveBot(BotAI):
         Do things here before the game starts
         """
         print("Game started")
+        print(self.game_info.map_size)
         self.proxy_poss = self.game_info.map_center.towards(self.enemy_start_locations[0], 20)
 
     async def on_step(self, iteration: int):
@@ -42,6 +71,8 @@ class CompetitiveBot(BotAI):
         This code runs continually throughout the game
         Populate this function with whatever your bot should do!
         """
+
+        print(iteration)
 
         await self.distribute_workers()
         await self.build_workers()
@@ -57,6 +88,9 @@ class CompetitiveBot(BotAI):
         await self.warp_stalkers()
         await self.micro()
         await self.expansion()
+
+        await self.scouting()
+        await self.vr_prismatic_alignment()
 
         # print(f"{iteration}, n_workers: {self.workers.amount}, n_idle_workers: {self.workers.idle.amount},", \
         #       f"minerals: {self.minerals}, gas: {self.vespene}, cannons: {self.structures(UnitTypeId.PHOTONCANNON).amount},", \
@@ -181,7 +215,12 @@ class CompetitiveBot(BotAI):
 
         for stalker in stalkers:
             if stalkercount > self.unit_attack_amount:
-                stalker.attack(self.enemy_start_locations[0])
+                if self.enemy_units:
+                    stalker.attack(random.choice(self.enemy_units))
+                elif self.enemy_structures:
+                    stalker.attack(random.choice(self.enemy_structures))
+                else:
+                    stalker.attack(self.enemy_start_locations[0])
             else:
                 stalker.attack(self.proxy_poss.random_on_distance(3))
 
@@ -211,6 +250,29 @@ class CompetitiveBot(BotAI):
     async def expansion(self):
         if self.can_afford(UnitTypeId.NEXUS):
             await self.expand_now()
+
+    async def scouting(self):
+        # Zkoumat primo postavenyma jednotkama
+        return
+        # for gateway in self.structures(UnitTypeId.GATEWAY).ready:
+        #     if (
+        #             self.can_afford(UnitTypeId.ZEALOT)
+        #             and self.units(UnitTypeId.ZEALOT).amount < 1
+        #             and self.already_pending(UnitTypeId.ZEALOT) == 0
+        #     ):
+        #         gateway.train(UnitTypeId.ZEALOT)
+        # if (
+        #         self.units(UnitTypeId.ZEALOT).ready.idle
+        # ):
+        #     zealot = self.units(UnitTypeId.ZEALOT).ready.idle
+        #     for position in self.enemy_start_locations:
+        #         zealot[0].attack(position)
+
+    async def vr_prismatic_alignment(self):
+        void_rays = self.units(UnitTypeId.VOIDRAY).ready
+        for vr in void_rays:
+            if (vr.is_attacking):
+                vr(AbilityId.EFFECT_VOIDRAYPRISMATICALIGNMENT)
 
     async def on_end(self, result: Result):
         """

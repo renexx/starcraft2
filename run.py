@@ -73,11 +73,11 @@ def parse_arguments():
 
     # Local play arguments
     parser.add_argument("--Sc2Version", type=str, help="The version of Starcraft 2 to load.")
-    parser.add_argument("--ComputerRace", type=str, default="Terran",
+    parser.add_argument("--ComputerRace", type=str, default="Protoss",
                         help="Computer race. One of [Terran, Zerg, Protoss, Random]. Default is Terran. Only for local play.")
-    parser.add_argument("--ComputerDifficulty", type=str, default="Hard",
+    parser.add_argument("--ComputerDifficulty", type=str, default="VeryHard",
                         help=f"Computer difficulty. One of [VeryEasy, Easy, Medium, MediumHard, Hard, Harder, VeryHard, CheatVision, CheatMoney, CheatInsane]. Default is VeryEasy. Only for local play.")
-    parser.add_argument("--Map", type=str, default="AcropolisLE",
+    parser.add_argument("--Map", type=str, default="Flat128",
                         help="The name of the map to use. Default is Simple64. Only for local play.")
 
     # Both Ladder and Local play arguments
