@@ -1,41 +1,11 @@
+from sc2.constants import *
 from sc2.bot_ai import BotAI, Race
 from sc2.ids.unit_typeid import UnitTypeId
 from sc2.ids.ability_id import AbilityId
 from sc2.ids.upgrade_id import UpgradeId
-from sc2.unit import Unit
 from sc2.units import Units
-from sc2.position import Point2
-from sc2.player import Bot, Computer
-from sc2.data import Result, Difficulty
+from sc2.data import Result
 import random
-
-"""
-#TODO
-
-Jirka:
-Reformat kodu - rozclenit na soubory
-Zniceni proxy pylon? Nepostavi se dalsi
-Rozsireni nexusu
-Neni zadna obrana - jednotky se nevraci
-Problem, pokud se rozsiri nekam uplne jinam! Najit a znicit base
-Problem, pokud na pozici nenajde zadneho enemy! - Optimalizace utoku
-Vytvorit pruzkum mapy nejakou jednotkou - pruzkum od urcite doby
-Ma vytvorene obranne budovy? Utocit nejdriv na obranne budovy
-Obrana v pripade utoku - jednotky se stahnou - v pozdejsi fazi hry nutne
-Mikro strategie - focus jednoho enemy
-Prizpusobit strategii na counter nasi extremne agresivni strategie
-
-
-Rene:
-1000 iteraci = 6 minuta
-Postavit Stargate!!! - utok voidray
-Stavet Void Ray
-Aktivovat Void ray abilitku, pokud je v utoku (Prismatic Alignment)
-Hlidat si mineraly u nexusu - Dochazeji
-Mala mapa - nesedi souradnice proxy (+zbytecny)
-Prizpusobit souradnice proxy pylonu podle velikosti mapy
-Prizpusobit souradnice staveni budov podle velikosti mapy
-"""
 
 
 class CompetitiveBot(BotAI):
@@ -55,7 +25,8 @@ class CompetitiveBot(BotAI):
         BotAI.__init__(self)
         self.proxy_built = False
         self.proxy_poss = None;
-        self.unit_attack_amount = 6;
+        self.unit_attack_amount = 10;
+        self.scout_location = [[None, False], [None, False], [None, False]];
 
     async def on_start(self):
         """
@@ -72,48 +43,36 @@ class CompetitiveBot(BotAI):
         Populate this function with whatever your bot should do!
         """
 
-        print(iteration)
-
         await self.distribute_workers()
-        await self.build_workers()
+        await self.build_probes()
         await self.build_pylons()
-        # await self.build_gateway()
-        await self.build_assimilator()
+        await self.build_assimilators()
         await self.build_cyber_core()
-        await self.build_other_gateways()
+        await self.build_four_gateways()
         await self.train_stalkers()
         await self.chrono_boost()
         await self.warpgate_research()
         await self.attack_procedure()
+        await self.morph_warpgate()
         await self.warp_stalkers()
-        await self.micro()
-        await self.expansion()
-
         await self.scouting()
-        await self.vr_prismatic_alignment()
 
-        # print(f"{iteration}, n_workers: {self.workers.amount}, n_idle_workers: {self.workers.idle.amount},", \
-        #       f"minerals: {self.minerals}, gas: {self.vespene}, cannons: {self.structures(UnitTypeId.PHOTONCANNON).amount},", \
-        #       f"pylons: {self.structures(UnitTypeId.PYLON).amount}, nexus: {self.structures(UnitTypeId.NEXUS).amount}", \
-        #       f"gateways: {self.structures(UnitTypeId.GATEWAY).amount}, cybernetics cores: {self.structures(UnitTypeId.CYBERNETICSCORE).amount}", \
-        #       f"stargates: {self.structures(UnitTypeId.STARGATE).amount}, voidrays: {self.units(UnitTypeId.VOIDRAY).amount}, supply: {self.supply_used}/{self.supply_cap}")
-
-    async def build_workers(self):
-        nexus = self.townhalls.ready.random
-        if (
-                self.can_afford(UnitTypeId.PROBE)
-                and nexus.is_idle
-                and self.workers.amount < self.townhalls.amount * 20
-        ):
-            nexus.train(UnitTypeId.PROBE)
+    # Build more probes
+    async def build_probes(self):
+        # Every nexus can take up to 20 probes
+        for nexus in self.townhalls.ready:
+            if self.workers.amount < self.townhalls.amount * 20 and nexus.is_idle:
+                if self.can_afford(UnitTypeId.PROBE):
+                    nexus.train(UnitTypeId.PROBE)
 
     async def build_pylons(self):
         nexus = self.townhalls.ready.random
-        position = nexus.position.towards(self.enemy_start_locations[0], 10)
+        position = nexus.position.towards(self.game_info.map_center, 8)
         if (
-                self.supply_left < 3
+                self.supply_left < 4
                 and self.already_pending(UnitTypeId.PYLON) == 0
                 and self.can_afford(UnitTypeId.PYLON)
+                and self.supply_used < 100
         ): await self.build(UnitTypeId.PYLON, near=position)
 
         # build proxy pylon
@@ -137,10 +96,8 @@ class CompetitiveBot(BotAI):
                 await self.build(UnitTypeId.GATEWAY, near=pylon)
 
     # Gas harvesting
-    async def build_assimilator(self):
-        if (
-                self.structures(UnitTypeId.GATEWAY)
-        ):
+    async def build_assimilators(self):
+        if self.structures(UnitTypeId.GATEWAY):
             for nexus in self.townhalls.ready:
                 assims = self.vespene_geyser.closer_than(15, nexus)
                 for assim in assims:
@@ -180,7 +137,7 @@ class CompetitiveBot(BotAI):
                 gateway.train(UnitTypeId.STALKER)
 
     # Classic 4 gateway strategy
-    async def build_other_gateways(self):
+    async def build_four_gateways(self):
         if (
                 self.structures(UnitTypeId.PYLON).ready
                 and self.can_afford(UnitTypeId.GATEWAY)
@@ -191,14 +148,19 @@ class CompetitiveBot(BotAI):
             await self.build(UnitTypeId.GATEWAY, near=pylon)
 
     async def chrono_boost(self):
-        if self.structures(UnitTypeId.PYLON).amount > 0:
-            nexus = self.townhalls.ready.random
-            if nexus.energy >= 50:
-                if not self.structures(UnitTypeId.CYBERNETICSCORE).ready:
-                    nexus(AbilityId.EFFECT_CHRONOBOOSTENERGYCOST, nexus)
-                else:
-                    cybercore = self.structures(UnitTypeId.CYBERNETICSCORE).ready.random
-                    nexus(AbilityId.EFFECT_CHRONOBOOSTENERGYCOST, cybercore)
+        if self.structures(UnitTypeId.CYBERNETICSCORE).ready:
+            cyb_core = self.structures(UnitTypeId.CYBERNETICSCORE).ready.first
+
+        nexus = self.townhalls.ready.random
+        if nexus.energy >= 50:
+            if not self.structures(UnitTypeId.CYBERNETICSCORE).ready:
+                nexus(AbilityId.EFFECT_CHRONOBOOSTENERGYCOST, nexus)
+            if (
+                    self.structures(UnitTypeId.CYBERNETICSCORE).ready
+                    and not cyb_core.is_idle
+                    and not cyb_core.has_buff(BuffId.CHRONOBOOSTENERGYCOST)
+            ):
+                nexus(AbilityId.EFFECT_CHRONOBOOSTENERGYCOST, cyb_core)
 
     async def warpgate_research(self):
         if (
@@ -206,23 +168,43 @@ class CompetitiveBot(BotAI):
                 and self.can_afford(AbilityId.RESEARCH_WARPGATE)
                 and self.already_pending_upgrade(UpgradeId.WARPGATERESEARCH) == 0
         ):
-            cybercore = self.structures(UnitTypeId.CYBERNETICSCORE).ready.random
-            cybercore.research(UpgradeId.WARPGATERESEARCH)
+            cyb_core = self.structures(UnitTypeId.CYBERNETICSCORE).ready.random
+            cyb_core.research(UpgradeId.WARPGATERESEARCH)
 
     async def attack_procedure(self):
         stalkercount = self.units(UnitTypeId.STALKER).amount
-        stalkers = self.units(UnitTypeId.STALKER).ready.idle
-
-        for stalker in stalkers:
-            if stalkercount > self.unit_attack_amount:
-                if self.enemy_units:
-                    stalker.attack(random.choice(self.enemy_units))
-                elif self.enemy_structures:
-                    stalker.attack(random.choice(self.enemy_structures))
+        stalkers = self.units(UnitTypeId.STALKER).ready
+        enemies: Units = self.enemy_units | self.enemy_structures
+        enemy_fighters = self.enemy_units.filter(lambda unit: unit.can_attack) + self.enemy_structures(
+            {UnitTypeId.BUNKER, UnitTypeId.SPINECRAWLER, UnitTypeId.PHOTONCANNON}
+        )
+        if stalkercount > self.unit_attack_amount:
+            for stalker in stalkers:
+                if enemy_fighters:
+                    enemies_in_range = enemy_fighters.in_attack_range_of(stalker)
+                    if (enemies_in_range):
+                        lowest_hp = min(enemies_in_range, key=lambda e: (e.health + e.shield, e.tag))
+                        self.micro_attack(stalker, lowest_hp)
+                    else:
+                        self.micro_attack(stalker, enemy_fighters.closest_to(stalker))
+                elif enemies:
+                    self.micro_attack(stalker, enemies.random)
                 else:
-                    stalker.attack(self.enemy_start_locations[0])
-            else:
+                    self.micro_attack(stalker, self.enemy_start_locations[0])
+        else:
+            for stalker in stalkers:
                 stalker.attack(self.proxy_poss.random_on_distance(3))
+
+    def micro_attack(self, stalker, enemy):
+        if stalker.weapon_cooldown == 0:
+            stalker.attack(enemy)
+        else:
+            stalker.move(self.start_location)
+
+    async def morph_warpgate(self):
+        for gateway in self.structures(UnitTypeId.GATEWAY).ready.idle:
+            if self.already_pending_upgrade(UpgradeId.WARPGATERESEARCH) == 1:
+                gateway(AbilityId.MORPH_WARPGATE)
 
     async def warp_stalkers(self):
         for warpgate in self.structures(UnitTypeId.WARPGATE).ready:
@@ -234,45 +216,33 @@ class CompetitiveBot(BotAI):
                 placement = self.proxy_poss.position.random_on_distance(3)
                 warpgate.warp_in(UnitTypeId.STALKER, placement)
 
-    async def micro(self):
-        stalkers = self.units(UnitTypeId.STALKER)
-        enemy_location = self.enemy_start_locations[0]
-
-        if self.proxy_built:
-            for stalker in stalkers:
-                if stalker.weapon_cooldown == 0 and stalkers.amount > self.unit_attack_amount:
-                    stalker.attack(enemy_location)
-                elif stalker.weapon_cooldown < 0:
-                    stalker.move(self.proxy_poss)
-                else:
-                    stalker.move(self.proxy_poss)
-
-    async def expansion(self):
-        if self.can_afford(UnitTypeId.NEXUS):
-            await self.expand_now()
-
     async def scouting(self):
-        # Zkoumat primo postavenyma jednotkama
-        return
-        # for gateway in self.structures(UnitTypeId.GATEWAY).ready:
-        #     if (
-        #             self.can_afford(UnitTypeId.ZEALOT)
-        #             and self.units(UnitTypeId.ZEALOT).amount < 1
-        #             and self.already_pending(UnitTypeId.ZEALOT) == 0
-        #     ):
-        #         gateway.train(UnitTypeId.ZEALOT)
-        # if (
-        #         self.units(UnitTypeId.ZEALOT).ready.idle
-        # ):
-        #     zealot = self.units(UnitTypeId.ZEALOT).ready.idle
-        #     for position in self.enemy_start_locations:
-        #         zealot[0].attack(position)
+        if (
+                self.units(UnitTypeId.ZEALOT).amount < 4
+                and self.supply_used > 50
+                and self.already_pending(UnitTypeId.ZEALOT) < 4
+                and self.can_afford(UnitTypeId.ZEALOT)
+        ):
+            if self.structures(UnitTypeId.GATEWAY).ready.amount > 0:
+                self.structures(UnitTypeId.GATEWAY).ready.random.build(UnitTypeId.ZEALOT)
+            elif self.structures(UnitTypeId.WARPGATE).ready.amount > 0:
+                self.structures(UnitTypeId.WARPGATE).ready.random.build(UnitTypeId.ZEALOT)
 
-    async def vr_prismatic_alignment(self):
-        void_rays = self.units(UnitTypeId.VOIDRAY).ready
-        for vr in void_rays:
-            if (vr.is_attacking):
-                vr(AbilityId.EFFECT_VOIDRAYPRISMATICALIGNMENT)
+        if self.units(UnitTypeId.ZEALOT).amount > 0:
+            zealot = self.units(UnitTypeId.ZEALOT).ready.random
+            if zealot.is_idle:
+                for minF in self.scout_location:
+                    if not minF[1]:
+                        minF[0] = random.choice(self.mineral_field)
+                        minF[1] = True
+                        zealot.move(minF[0])
+                        break
+            else:
+                for minF in self.scout_location:
+                    if minF[0] and zealot.position.is_closer_than(10, minF[0]):
+                        minF[1] = False
+                        zealot.stop()
+                        break
 
     async def on_end(self, result: Result):
         """
