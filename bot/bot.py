@@ -97,8 +97,8 @@ class ReJiBoBot(BotAI):
     async def build_assimilators(self):
         if self.structures(UnitTypeId.GATEWAY):
             for nexus in self.townhalls.ready:
-                assims = self.vespene_geyser.closer_than(15, nexus)
-                for assim in assims:
+                assimilators = self.vespene_geyser.closer_than(15, nexus)
+                for assim in assimilators:
                     if not self.can_afford(UnitTypeId.ASSIMILATOR):
                         break
                     worker = self.select_build_worker(assim.position)
