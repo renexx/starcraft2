@@ -68,7 +68,7 @@ You can close the SC2 window to stop your bot running.
 ### Bot name and race
 
 Now you will want to name your bot and select its race.
-You can specify both of these in the [bot/bot.py](bot/bot.py) file, in the `CompetitiveBot` class.
+You can specify both of these in the [bot/bot.py](bot/bot.py) file, in the `ReJiBoBot` class.
 
 ### Adding new code
 

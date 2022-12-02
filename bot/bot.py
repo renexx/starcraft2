@@ -8,18 +8,11 @@ from sc2.data import Result
 import random
 
 
-class CompetitiveBot(BotAI):
-    NAME: str = "CompetitiveBot"
+class ReJiBoBot(BotAI):
+    NAME: str = "ReJiBoBot"
     """This bot's name"""
 
     RACE: Race = Race.Protoss
-    """This bot's Starcraft 2 race.
-    Options are:
-        Race.Terran
-        Race.Zerg
-        Race.Protoss
-        Race.Random
-    """
 
     def __init__(self):
         BotAI.__init__(self)
@@ -34,8 +27,8 @@ class CompetitiveBot(BotAI):
         Do things here before the game starts
         """
         print("Game started")
-        print(self.game_info.map_size)
-        self.proxy_poss = self.game_info.map_center.towards(self.enemy_start_locations[0], 20)
+        self.proxy_poss = self.game_info.map_center.towards(self.enemy_start_locations[0],
+                                                            self.game_info.map_size[0] / 10)
 
     async def on_step(self, iteration: int):
         """
@@ -57,13 +50,16 @@ class CompetitiveBot(BotAI):
         await self.warp_stalkers()
         await self.scouting()
 
-    # Build more probes
+    """Build more probes"""
+
     async def build_probes(self):
         # Every nexus can take up to 20 probes
         for nexus in self.townhalls.ready:
             if self.workers.amount < self.townhalls.amount * 20 and nexus.is_idle:
                 if self.can_afford(UnitTypeId.PROBE):
                     nexus.train(UnitTypeId.PROBE)
+
+    """Build pylons"""
 
     async def build_pylons(self):
         nexus = self.townhalls.ready.random
@@ -75,7 +71,7 @@ class CompetitiveBot(BotAI):
                 and self.supply_used < 100
         ): await self.build(UnitTypeId.PYLON, near=position)
 
-        # build proxy pylon
+        """Build proxy pylon"""
         if (
                 self.structures(UnitTypeId.GATEWAY).amount == 4
                 and not self.proxy_built
@@ -84,7 +80,8 @@ class CompetitiveBot(BotAI):
             await self.build(UnitTypeId.PYLON, near=self.proxy_poss)
             self.proxy_built = True
 
-    # Building the first gateway
+    """Building the first gateway"""
+
     async def build_gateway(self):
         if (4 * self.structures(UnitTypeId.NEXUS).amount > self.structures(UnitTypeId.GATEWAY).amount):
             if (
@@ -95,7 +92,8 @@ class CompetitiveBot(BotAI):
                 pylon = self.structures(UnitTypeId.PYLON).ready.random
                 await self.build(UnitTypeId.GATEWAY, near=pylon)
 
-    # Gas harvesting
+    """ Gas harvesting"""
+
     async def build_assimilators(self):
         if self.structures(UnitTypeId.GATEWAY):
             for nexus in self.townhalls.ready:
@@ -113,7 +111,8 @@ class CompetitiveBot(BotAI):
                         worker.build(UnitTypeId.ASSIMILATOR, assim)
                         worker.stop(queue=True)
 
-    # Building cyber core for stalkers
+    """Building cyber core for stalkers"""
+
     async def build_cyber_core(self):
         if (
                 self.structures(UnitTypeId.PYLON).ready
@@ -127,7 +126,8 @@ class CompetitiveBot(BotAI):
             ):
                 await self.build(UnitTypeId.CYBERNETICSCORE, near=pylon)
 
-    # Training new stalkers
+    """Training new stalkers"""
+
     async def train_stalkers(self):
         for gateway in self.structures(UnitTypeId.GATEWAY).ready:
             if (
@@ -136,7 +136,8 @@ class CompetitiveBot(BotAI):
             ):
                 gateway.train(UnitTypeId.STALKER)
 
-    # Classic 4 gateway strategy
+    """Classic 4 gateway strategy"""
+
     async def build_four_gateways(self):
         if (
                 self.structures(UnitTypeId.PYLON).ready
@@ -146,6 +147,8 @@ class CompetitiveBot(BotAI):
         ):
             pylon = self.structures(UnitTypeId.PYLON).ready.first
             await self.build(UnitTypeId.GATEWAY, near=pylon)
+
+    """Chrono boost"""
 
     async def chrono_boost(self):
         if self.structures(UnitTypeId.CYBERNETICSCORE).ready:
@@ -162,6 +165,8 @@ class CompetitiveBot(BotAI):
             ):
                 nexus(AbilityId.EFFECT_CHRONOBOOSTENERGYCOST, cyb_core)
 
+    """Warpgate research"""
+
     async def warpgate_research(self):
         if (
                 self.structures(UnitTypeId.CYBERNETICSCORE).ready
@@ -170,6 +175,8 @@ class CompetitiveBot(BotAI):
         ):
             cyb_core = self.structures(UnitTypeId.CYBERNETICSCORE).ready.random
             cyb_core.research(UpgradeId.WARPGATERESEARCH)
+
+    """Attack"""
 
     async def attack_procedure(self):
         stalkercount = self.units(UnitTypeId.STALKER).amount
@@ -195,16 +202,22 @@ class CompetitiveBot(BotAI):
             for stalker in stalkers:
                 stalker.attack(self.proxy_poss.random_on_distance(3))
 
+    """Micro attack"""
+
     def micro_attack(self, stalker, enemy):
         if stalker.weapon_cooldown == 0:
             stalker.attack(enemy)
         else:
             stalker.move(self.start_location)
 
+    """Morph warpgate"""
+
     async def morph_warpgate(self):
         for gateway in self.structures(UnitTypeId.GATEWAY).ready.idle:
             if self.already_pending_upgrade(UpgradeId.WARPGATERESEARCH) == 1:
                 gateway(AbilityId.MORPH_WARPGATE)
+
+    """Warp stalkers"""
 
     async def warp_stalkers(self):
         for warpgate in self.structures(UnitTypeId.WARPGATE).ready:
@@ -215,6 +228,8 @@ class CompetitiveBot(BotAI):
             ):
                 placement = self.proxy_poss.position.random_on_distance(3)
                 warpgate.warp_in(UnitTypeId.STALKER, placement)
+
+    """Scounting for enemies"""
 
     async def scouting(self):
         if (
